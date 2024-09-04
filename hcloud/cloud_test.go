@@ -27,6 +27,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	hrobot "github.com/syself/hrobot-go"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
 
 	"github.com/hetznercloud/hcloud-cloud-controller-manager/internal/testsupport"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
@@ -38,6 +41,7 @@ type testEnv struct {
 	Mux         *http.ServeMux
 	Client      *hcloud.Client
 	RobotClient hrobot.RobotClient
+	Recorder    record.EventRecorder
 }
 
 func (env *testEnv) Teardown() {
@@ -46,6 +50,7 @@ func (env *testEnv) Teardown() {
 	env.Mux = nil
 	env.Client = nil
 	env.RobotClient = nil
+	env.Recorder = nil
 }
 
 func newTestEnv() testEnv {
@@ -54,16 +59,19 @@ func newTestEnv() testEnv {
 	client := hcloud.NewClient(
 		hcloud.WithEndpoint(server.URL),
 		hcloud.WithToken("jr5g7ZHpPptyhJzZyHw2Pqu4g9gTqDvEceYpngPf79jNZXCeTYQ4uArypFM3nh75"),
-		hcloud.WithBackoffFunc(func(_ int) time.Duration { return 0 }),
+		hcloud.WithPollOpts(hcloud.PollOpts{BackoffFunc: hcloud.ConstantBackoff(0)}),
+		hcloud.WithRetryOpts(hcloud.RetryOpts{BackoffFunc: hcloud.ConstantBackoff(0)}),
 		hcloud.WithDebugWriter(os.Stdout),
 	)
 	robotClient := hrobot.NewBasicAuthClient("", "")
 	robotClient.SetBaseURL(server.URL + "/robot")
+	recorder := record.NewBroadcaster().NewRecorder(scheme.Scheme, corev1.EventSource{Component: "hcloud-cloud-controller-manager"})
 	return testEnv{
 		Server:      server,
 		Mux:         mux,
 		Client:      client,
 		RobotClient: robotClient,
+		Recorder:    recorder,
 	}
 }
 
@@ -77,7 +85,7 @@ func TestNewCloud(t *testing.T) {
 		"HCLOUD_METRICS_ENABLED", "false",
 	)
 	defer resetEnv()
-	env.Mux.HandleFunc("/servers", func(w http.ResponseWriter, r *http.Request) {
+	env.Mux.HandleFunc("/servers", func(w http.ResponseWriter, _ *http.Request) {
 		json.NewEncoder(w).Encode(
 			schema.ServerListResponse{
 				Servers: []schema.Server{},
@@ -112,7 +120,7 @@ func TestNewCloudInvalidToken(t *testing.T) {
 		"HCLOUD_METRICS_ENABLED", "false",
 	)
 	defer resetEnv()
-	env.Mux.HandleFunc("/servers", func(w http.ResponseWriter, r *http.Request) {
+	env.Mux.HandleFunc("/servers", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(
@@ -141,7 +149,7 @@ func TestCloud(t *testing.T) {
 		"ROBOT_PASSWORD", "pass123",
 	)
 	defer resetEnv()
-	env.Mux.HandleFunc("/servers", func(w http.ResponseWriter, r *http.Request) {
+	env.Mux.HandleFunc("/servers", func(w http.ResponseWriter, _ *http.Request) {
 		json.NewEncoder(w).Encode(
 			schema.ServerListResponse{
 				Servers: []schema.Server{
@@ -170,7 +178,7 @@ func TestCloud(t *testing.T) {
 			},
 		)
 	})
-	env.Mux.HandleFunc("/networks/1", func(w http.ResponseWriter, r *http.Request) {
+	env.Mux.HandleFunc("/networks/1", func(w http.ResponseWriter, _ *http.Request) {
 		json.NewEncoder(w).Encode(
 			schema.NetworkGetResponse{
 				Network: schema.Network{

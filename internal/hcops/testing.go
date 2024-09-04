@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	hrobotmodels "github.com/syself/hrobot-go/models"
+	"k8s.io/client-go/tools/record"
 
 	"github.com/hetznercloud/hcloud-cloud-controller-manager/internal/mocks"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
@@ -49,6 +50,7 @@ func NewLoadBalancerOpsFixture(t *testing.T) *LoadBalancerOpsFixture {
 		ActionClient:  fx.ActionClient,
 		NetworkClient: fx.NetworkClient,
 		RobotClient:   fx.RobotClient,
+		Recorder:      &record.FakeRecorder{},
 	}
 
 	return fx
@@ -125,10 +127,6 @@ func (fx *LoadBalancerOpsFixture) MockListRobotServers(
 	serverList []hrobotmodels.Server, err error,
 ) {
 	fx.RobotClient.On("ServerGetList").Return(serverList, err)
-}
-
-func (fx *LoadBalancerOpsFixture) MockWatchProgress(a *hcloud.Action, err error) {
-	fx.ActionClient.MockWatchProgress(fx.Ctx, a, err)
 }
 
 func (fx *LoadBalancerOpsFixture) AssertExpectations() {

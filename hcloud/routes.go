@@ -7,6 +7,7 @@ import (
 	"net"
 	"time"
 
+	"golang.org/x/time/rate"
 	"k8s.io/apimachinery/pkg/types"
 	cloudprovider "k8s.io/cloud-provider"
 	"k8s.io/klog/v2"
@@ -14,6 +15,10 @@ import (
 	"github.com/hetznercloud/hcloud-cloud-controller-manager/internal/hcops"
 	"github.com/hetznercloud/hcloud-cloud-controller-manager/internal/metrics"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+)
+
+var (
+	serversCacheMissRefreshRate = rate.Every(30 * time.Second)
 )
 
 type routes struct {
@@ -40,8 +45,9 @@ func newRoutes(client *hcloud.Client, networkID int64) (*routes, error) {
 		serverCache: &hcops.AllServersCache{
 			// client.Server.All will load ALL the servers in the project, even those
 			// that are not part of the Kubernetes cluster.
-			LoadFunc: client.Server.All,
-			Network:  networkObj,
+			LoadFunc:                client.Server.All,
+			Network:                 networkObj,
+			CacheMissRefreshLimiter: rate.NewLimiter(serversCacheMissRefreshRate, 1),
 		},
 	}, nil
 }
@@ -103,7 +109,7 @@ func (r *routes) CreateRoute(ctx context.Context, clusterName string, nameHint s
 
 		privNet, ok = findServerPrivateNetByID(srv, r.network.ID)
 		if !ok {
-			return fmt.Errorf("%s: server %v: network with id %d not attached to this server ", op, route.TargetNode, r.network.ID)
+			return fmt.Errorf("%s: server %v: network with id %d not attached to this server", op, route.TargetNode, r.network.ID)
 		}
 	}
 	ip := privNet.IP
@@ -127,7 +133,7 @@ func (r *routes) CreateRoute(ctx context.Context, clusterName string, nameHint s
 		}
 		action, _, err := r.client.Network.AddRoute(ctx, r.network, opts)
 		if err != nil {
-			if hcloud.IsError(err, hcloud.ErrorCodeLocked) || hcloud.IsError(err, hcloud.ErrorCodeConflict) {
+			if hcloud.IsError(err, hcloud.ErrorCodeLocked, hcloud.ErrorCodeConflict) {
 				retryDelay := time.Second * 5
 				klog.InfoS("retry due to conflict or lock",
 					"op", op, "delay", fmt.Sprintf("%v", retryDelay), "err", fmt.Sprintf("%v", err))
@@ -138,7 +144,7 @@ func (r *routes) CreateRoute(ctx context.Context, clusterName string, nameHint s
 			return fmt.Errorf("%s: %w", op, err)
 		}
 
-		if err := hcops.WatchAction(ctx, &r.client.Action, action); err != nil {
+		if err := r.client.Action.WaitFor(ctx, action); err != nil {
 			return fmt.Errorf("%s: %w", op, err)
 		}
 	}
@@ -188,7 +194,7 @@ func (r *routes) deleteRouteFromHcloud(ctx context.Context, cidr *net.IPNet, ip 
 
 	action, _, err := r.client.Network.DeleteRoute(ctx, r.network, opts)
 	if err != nil {
-		if hcloud.IsError(err, hcloud.ErrorCodeLocked) || hcloud.IsError(err, hcloud.ErrorCodeConflict) {
+		if hcloud.IsError(err, hcloud.ErrorCodeLocked, hcloud.ErrorCodeConflict) {
 			retryDelay := time.Second * 5
 			klog.InfoS("retry due to conflict or lock",
 				"op", op, "delay", fmt.Sprintf("%v", retryDelay), "err", fmt.Sprintf("%v", err))
@@ -198,7 +204,7 @@ func (r *routes) deleteRouteFromHcloud(ctx context.Context, cidr *net.IPNet, ip 
 		}
 		return fmt.Errorf("%s: %w", op, err)
 	}
-	if err := hcops.WatchAction(ctx, &r.client.Action, action); err != nil {
+	if err := r.client.Action.WaitFor(ctx, action); err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
 	return nil
@@ -256,7 +262,7 @@ func (r *routes) checkIfRouteAlreadyExists(ctx context.Context, route *cloudprov
 					return false, fmt.Errorf("%s: %w", op, err)
 				}
 
-				if err := hcops.WatchAction(ctx, &r.client.Action, action); err != nil {
+				if err := r.client.Action.WaitFor(ctx, action); err != nil {
 					return false, fmt.Errorf("%s: %w", op, err)
 				}
 			}

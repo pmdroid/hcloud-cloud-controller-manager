@@ -6,6 +6,8 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/hetznercloud/hcloud-go/v2/hcloud/exp/kit/envutil"
 )
 
 const (
@@ -106,7 +108,10 @@ func Read() (HCCMConfiguration, error) {
 	var errs []error
 	var cfg HCCMConfiguration
 
-	cfg.HCloudClient.Token = os.Getenv(hcloudToken)
+	cfg.HCloudClient.Token, err = envutil.LookupEnvWithFile(hcloudToken)
+	if err != nil {
+		errs = append(errs, err)
+	}
 	cfg.HCloudClient.Endpoint = os.Getenv(hcloudEndpoint)
 	cfg.HCloudClient.Debug, err = getEnvBool(hcloudDebug, false)
 	if err != nil {
@@ -117,8 +122,14 @@ func Read() (HCCMConfiguration, error) {
 	if err != nil {
 		errs = append(errs, err)
 	}
-	cfg.Robot.User = os.Getenv(robotUser)
-	cfg.Robot.Password = os.Getenv(robotPassword)
+	cfg.Robot.User, err = envutil.LookupEnvWithFile(robotUser)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	cfg.Robot.Password, err = envutil.LookupEnvWithFile(robotPassword)
+	if err != nil {
+		errs = append(errs, err)
+	}
 	cfg.Robot.CacheTimeout, err = getEnvDuration(robotCacheTimeout)
 	if err != nil {
 		errs = append(errs, err)

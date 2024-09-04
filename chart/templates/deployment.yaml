@@ -14,6 +14,13 @@ spec:
     metadata:
       labels:
         {{- include "hcloud-cloud-controller-manager.selectorLabels" . | nindent 8 }}
+        {{- if .Values.podLabels }}
+        {{- toYaml .Values.podLabels | nindent 8 }}
+        {{- end }}
+      {{- if .Values.podAnnotations }}
+      annotations:
+        {{- toYaml .Values.podAnnotations | nindent 8 }}
+      {{- end }}
     spec:
       serviceAccountName: {{ include "hcloud-cloud-controller-manager.name" . }}
       dnsPolicy: Default
@@ -39,10 +46,15 @@ spec:
         {{- if gt (len .Values.additionalTolerations) 0 }}
         {{ toYaml .Values.additionalTolerations | nindent 8 }}
         {{- end }}
-      
+
       {{- if gt (len .Values.nodeSelector) 0 }}
-      nodeSelector: 
+      nodeSelector:
         {{ toYaml .Values.nodeSelector | nindent 8 }}
+      {{- end }}
+
+      {{- if gt (len .Values.affinity) 0 }}
+      affinity:
+        {{ toYaml .Values.affinity | nindent 8 }}
       {{- end }}
 
       {{- if $.Values.networking.enabled }}
@@ -50,8 +62,7 @@ spec:
       {{- end }}
       containers:
         - name: hcloud-cloud-controller-manager
-          command:
-            - "/bin/hcloud-cloud-controller-manager"
+          args:
             {{- range $key, $value := $.Values.args }}
             {{- if not (eq $value nil) }}
             - "--{{ $key }}{{ if $value }}={{ $value }}{{ end }}"

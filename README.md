@@ -26,7 +26,7 @@ apiVersion: v1
 kind: Node
 metadata:
   labels:
-    node.kubernetes.io/instance-type: cx11
+    node.kubernetes.io/instance-type: cx22
     topology.kubernetes.io/region: fsn1
     topology.kubernetes.io/zone: fsn1-dc8
   name: node
@@ -58,70 +58,73 @@ guide](https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/),
 which these instructions are meant to augment and the [kubeadm
 documentation](https://kubernetes.io/docs/reference/setup-tools/kubeadm/kubeadm/).
 
-1. The cloud controller manager adds its labels when a node is added to
+1. The cloud controller manager adds the labels when a node is added to
    the cluster. For current Kubernetes versions, this means we
-   have to add the `--cloud-provider=external` flag to the `kubelet`
-   before initializing the control plane with `kubeadm init`. To do
-   accomplish this we add this systemd drop-in unit
-   `/etc/systemd/system/kubelet.service.d/20-hcloud.conf`:
+   have to add the `--cloud-provider=external` flag to the `kubelet`. How you
+   do this depends on your Kubernetes distribution. With `kubeadm` you can
+   either set it in the kubeadm config
+   ([`nodeRegistration.kubeletExtraArgs`][kubeadm-config]) or through a systemd
+   drop-in unit `/etc/systemd/system/kubelet.service.d/20-hcloud.conf`:
 
-    ```
-    [Service]
-    Environment="KUBELET_EXTRA_ARGS=--cloud-provider=external"
-    ```
+   ```ini
+   [Service]
+   Environment="KUBELET_EXTRA_ARGS=--cloud-provider=external"
+   ```
 
    Note: the `--cloud-provider` flag is deprecated since K8S 1.19. You
-   will see a log message regarding this. For now (v1.26) it is still required.
+   will see a log message regarding this. For now (v1.30) it is still required.
 
 2. Now the control plane can be initialized:
 
-    ```sh
-    sudo kubeadm init --pod-network-cidr=10.244.0.0/16
-    ```
+   ```sh
+   sudo kubeadm init --pod-network-cidr=10.244.0.0/16
+   ```
 
 3. Configure kubectl to connect to the kube-apiserver:
 
-    ```sh
-    mkdir -p $HOME/.kube
-    sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
-    sudo chown $(id -u):$(id -g) $HOME/.kube/config
-    ```
+   ```sh
+   mkdir -p $HOME/.kube
+   sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+   sudo chown $(id -u):$(id -g) $HOME/.kube/config
+   ```
 
 4. Deploy the flannel CNI plugin:
 
-    ```sh
-    kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/v0.9.1/Documentation/kube-flannel.yml
-    ```
+   ```sh
+   kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+   ```
 
 5. Patch the flannel deployment to tolerate the `uninitialized` taint:
 
-    ```sh
-    kubectl -n kube-system patch ds kube-flannel-ds --type json -p '[{"op":"add","path":"/spec/template/spec/tolerations/-","value":{"key":"node.cloudprovider.kubernetes.io/uninitialized","value":"true","effect":"NoSchedule"}}]'
-    ```
+   ```sh
+   kubectl -n kube-system patch ds kube-flannel-ds --type json -p '[{"op":"add","path":"/spec/template/spec/tolerations/-","value":{"key":"node.cloudprovider.kubernetes.io/uninitialized","value":"true","effect":"NoSchedule"}}]'
+   ```
 
 6. Create a secret containing your Hetzner Cloud API token.
 
-    ```sh
-    kubectl -n kube-system create secret generic hcloud --from-literal=token=<hcloud API token>
-    ```
+   ```sh
+   kubectl -n kube-system create secret generic hcloud --from-literal=token=<hcloud API token>
+   ```
 
 7. Deploy `hcloud-cloud-controller-manager`
 
-    **Using Helm (recommended):**
+   **Using Helm (recommended):**
 
-    ```
-    helm repo add hcloud https://charts.hetzner.cloud
-    helm repo update hcloud
-    helm install hccm hcloud/hcloud-cloud-controller-manager -n kube-system
-    ```
+   ```
+   helm repo add hcloud https://charts.hetzner.cloud
+   helm repo update hcloud
+   helm install hccm hcloud/hcloud-cloud-controller-manager -n kube-system
+   ```
 
-    See the [Helm chart README](./chart/README.md) for more info.
+   See the [Helm chart README](./chart/README.md) for more info.
 
-    **Legacy installation method**:
+   **Legacy installation method**:
 
-    ```sh
-    kubectl apply -f https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/latest/download/ccm.yaml
-    ```
+   ```sh
+   kubectl apply -f https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/latest/download/ccm.yaml
+   ```
+
+[kubeadm-config]: https://kubernetes.io/docs/reference/config-api/kubeadm-config.v1beta4/#kubeadm-k8s-io-v1beta4-NodeRegistrationOptions
 
 ## Networks support
 
@@ -176,11 +179,12 @@ Current Kubernetes Releases: https://kubernetes.io/releases/
 ### With Networks support
 
 | Kubernetes | Cloud Controller Manager |                                                                                             Deployment File |
-|------------|-------------------------:|------------------------------------------------------------------------------------------------------------:|
+| ---------- | -----------------------: | ----------------------------------------------------------------------------------------------------------: |
+| 1.30       |                   latest |  https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/latest/download/ccm-networks.yaml |
 | 1.29       |                   latest |  https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/latest/download/ccm-networks.yaml |
 | 1.28       |                   latest |  https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/latest/download/ccm-networks.yaml |
 | 1.27       |                   latest |  https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/latest/download/ccm-networks.yaml |
-| 1.26       |                   latest |  https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/latest/download/ccm-networks.yaml |
+| 1.26       |                  v1.19.0 | https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/download/v1.19.0/ccm-networks.yaml |
 | 1.25       |                  v1.19.0 | https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/download/v1.19.0/ccm-networks.yaml |
 | 1.24       |                  v1.17.2 | https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/download/v1.17.2/ccm-networks.yaml |
 | 1.23       |                  v1.13.2 | https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/download/v1.13.2/ccm-networks.yaml |
@@ -188,147 +192,109 @@ Current Kubernetes Releases: https://kubernetes.io/releases/
 ### Without Networks support
 
 | Kubernetes | Cloud Controller Manager |                                                                                    Deployment File |
-|------------|-------------------------:|---------------------------------------------------------------------------------------------------:|
+| ---------- | -----------------------: | -------------------------------------------------------------------------------------------------: |
+| 1.30       |                   latest |  https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/latest/download/ccm.yaml |
 | 1.29       |                   latest |  https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/latest/download/ccm.yaml |
 | 1.28       |                   latest |  https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/latest/download/ccm.yaml |
 | 1.27       |                   latest |  https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/latest/download/ccm.yaml |
-| 1.26       |                   latest |  https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/latest/download/ccm.yaml |
+| 1.26       |                  v1.19.0 | https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/download/v1.19.0/ccm.yaml |
 | 1.25       |                  v1.19.0 | https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/download/v1.19.0/ccm.yaml |
 | 1.24       |                  v1.17.2 | https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/download/v1.17.2/ccm.yaml |
 | 1.23       |                  v1.13.2 | https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/download/v1.13.2/ccm.yaml |
 
-## Unit tests
+## Development
 
-To run unit tests locally, execute
+### Setup a development environment
+
+To set up a development environment, make sure you installed the following tools:
+
+- [tofu](https://opentofu.org/)
+- [k3sup](https://github.com/alexellis/k3sup)
+- [docker](https://www.docker.com/)
+- [skaffold](https://skaffold.dev/)
+
+1. Configure a `HCLOUD_TOKEN` in your shell session.
+
+> [!WARNING]
+> The development environment runs on Hetzner Cloud servers which will induce costs.
+
+2. Deploy the development cluster:
+
+```sh
+make -C dev up
+```
+
+3. Load the generated configuration to access the development cluster:
+
+```sh
+source dev/files/env.sh
+```
+
+4. Check that the development cluster is healthy:
+
+```sh
+kubectl get nodes -o wide
+```
+
+5. Start developing hcloud-cloud-controller-manager in the development cluster:
+
+```sh
+skaffold dev
+```
+
+On code change, skaffold will rebuild the image, redeploy it and print all logs.
+
+⚠️ Do not forget to clean up the development cluster once are finished:
+
+```sh
+make -C dev down
+```
+
+### Run the unit tests
+
+To run the unit tests, make sure you installed the following tools:
+
+- [Go](https://go.dev/)
+
+1. Run the following command to run the unit tests:
 
 ```sh
 go test ./...
 ```
 
-Check that your go version is up-to-date, tests might fail if it is not.
+### Run the kubernetes e2e tests
 
-If in doubt, check which go version is installed in the [ci.yaml](.github/workflows/ci.yaml) GitHub Actions Workflow:
+Before running the e2e tests, make sure you followed the [Setup a development environment](#setup-a-development-environment) steps.
 
-```yaml
-go-version: "1.21"
+1. Run the kubernetes e2e tests using the following command:
+
+```sh
+source dev/files/env.sh
+go test ./tests/e2e -tags e2e -v
 ```
 
-## E2E Tests
+### Development with Robot
 
-The Hetzner Cloud cloud controller manager was tested against all
-supported Kubernetes versions. We also test against the same k3s
-releases (Sample: When we support testing against Kubernetes 1.20.x we
-also try to support k3s 1.20.x). We try to keep compatibility with k3s
-but never guarantee this.
+If you want to work on the Robot support, you need to make some changes to the above setup.
 
-You can run the tests with the following commands. Keep in mind, that
-these tests run on real cloud servers and will create Load Balancers
-that will be billed.
+This requires that you have a Robot Server in the same account you use for the development. The server needs to be setup with the Ansible Playbook `dev/robot/install.yml` and configured in `dev/robot/install.yml`.
 
-**Test Server Setup:**
+1. Set these environment variables:
 
-1x CPX21 (Ubuntu 18.04)
+```shell
+export ROBOT_ENABLED=true
 
-**Requirements: Docker and Go 1.21**
-
-1. Configure your environment correctly
-
-```bash
-export HCLOUD_TOKEN=<specifiy a project token>
-export K8S_VERSION=k8s-1.21.0 # The specific (latest) version is needed here
-export USE_SSH_KEYS=key1,key2 # Name or IDs of your SSH Keys within the Hetzner Cloud, the servers will be accessable with that keys
-export USE_NETWORKS=yes # if `yes` this identidicates that the tests should provision the server with cilium as CNI and also enable the Network related tests
-## Optional configuration env vars:
-export TEST_DEBUG_MODE=yes # With this env you can toggle the output of the provision and test commands. With `yes` it will log the whole output to stdout
-export KEEP_SERVER_ON_FAILURE=yes # Keep the test server after a test failure.
+export ROBOT_USER=<Your Robot User>
+export ROBOT_PASSWORD=<Your Robot Password>
 ```
 
-2. Run the tests
+2. Continue with the environment setup until you reach the `skaffold` step. Run `skaffold dev --profile=robot` instead.
 
-```bash
-go test ./tests/e2e -tags e2e -v -timeout 60m
+3. We have another suite of tests for Robot. You can run these with:
+
+```sh
+go test ./tests/e2e -tags e2e,robot -v
 ```
-
-The tests will now run and cleanup themselves afterward. Sometimes it might happen that you need to clean up the
-project manually via the [Hetzner Cloud Console](https://console.hetzner.cloud) or
-the [hcloud-cli](https://github.com/hetznercloud/cli) .
-
-For easier debugging on the server we always configure the latest version of
-the [hcloud-cli](https://github.com/hetznercloud/cli) with the given `HCLOUD_TOKEN` and a few bash aliases on the host:
-
-```bash
-alias k="kubectl"
-alias ksy="kubectl -n kube-system"
-alias kgp="kubectl get pods"
-alias kgs="kubectl get services"
-```
-
-The test suite is split in three parts:
-
-- **General Part**: Sets up the test env & checks if the HCCM Pod is properly running
-   - Build Tag: `e2e`
-- **Cloud Part**: Tests regular functionality against a Cloud-only environment
-   - Build Tag: `e2e && !robot`
-- **Robot Part**: Tests Robot functionality against a Cloud+Robot environment
-   - Build Tag: `e2e && robot`
-
-## Local test setup
-This repository provides [skaffold](https://skaffold.dev/) to easily deploy / debug this controller on demand
-
-### Requirements
-1. Install [hcloud-cli](https://github.com/hetznercloud/cli)
-2. Install [k3sup](https://github.com/alexellis/k3sup)
-3. Install [cilium](https://github.com/cilium/cilium-cli)
-4. Install [docker](https://www.docker.com/)
-
-You will also need to set a `HCLOUD_TOKEN` in your shell session
-### Manual Installation guide
-1. Create an SSH key
-
-Assuming you already have created an ssh key via `ssh-keygen`
-```
-hcloud ssh-key create --name ssh-key-ccm-test --public-key-from-file ~/.ssh/id_rsa.pub 
-```
-
-2. Create a server
-```
-hcloud server create --name ccm-test-server --image ubuntu-20.04 --ssh-key ssh-key-ccm-test --type cx11 
-```
-
-3. Setup k3s on this server
-```
-k3sup install --ip $(hcloud server ip ccm-test-server) --local-path=/tmp/kubeconfig --cluster --k3s-channel=v1.23 --k3s-extra-args='--no-flannel --no-deploy=servicelb --no-deploy=traefik --disable-cloud-controller --disable-network-policy --kubelet-arg=cloud-provider=external'
-```
-- The kubeconfig will be created under `/tmp/kubeconfig`
-- Kubernetes version can be configured via `--k3s-channel`
-
-4. Switch your kubeconfig to the test cluster. Very important: exporting this like 
-```
-export KUBECONFIG=/tmp/kubeconfig
-```
-
-5. Install cilium + test your cluster
-```
-cilium install
-```
-
-6. Add your secret to the cluster
-```
-kubectl -n kube-system create secret generic hcloud --from-literal="token=$HCLOUD_TOKEN"
-```
-
-7. Deploy the hcloud-cloud-controller-manager
-```
-SKAFFOLD_DEFAULT_REPO=your_docker_hub_username skaffold dev
-```
-
-- `docker login` required
-- Skaffold is using your own Docker Hub repo to push the HCCM image.
-- After the first run, you might need to set the image to "public" on hub.docker.com
-
-On code change, Skaffold will repack the image & deploy it to your test cluster again. It will also stream logs from the hccm Deployment.
-
-*After setting this up, only the command from step 7 is required!*=
 
 ## License
 

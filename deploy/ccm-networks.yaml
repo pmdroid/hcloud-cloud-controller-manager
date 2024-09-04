@@ -60,8 +60,7 @@ spec:
       hostNetwork: true
       containers:
         - name: hcloud-cloud-controller-manager
-          command:
-            - "/bin/hcloud-cloud-controller-manager"
+          args:
             - "--allow-untagged-cloud"
             - "--cloud-provider=hcloud"
             - "--route-reconciliation-period=30s"
@@ -92,7 +91,7 @@ spec:
                 secretKeyRef:
                   key: network
                   name: hcloud
-          image: hetznercloud/hcloud-cloud-controller-manager:v1.19.0 # x-release-please-version
+          image: docker.io/hetznercloud/hcloud-cloud-controller-manager:v1.20.0 # x-release-please-version
           ports:
             - name: metrics
               containerPort: 8233

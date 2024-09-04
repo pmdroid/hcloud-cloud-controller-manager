@@ -29,6 +29,16 @@ env:
   # HCLOUD_NETWORK - see networking.enabled
   # ROBOT_ENABLED - see robot.enabled
 
+  # You can also use a file to provide secrets to the hcloud-cloud-controller-manager.
+  # This is currently possible for HCLOUD_TOKEN, ROBOT_USER, and ROBOT_PASSWORD.
+  # Use the env var appended with _FILE (e.g. HCLOUD_TOKEN_FILE) and set the value to the file path that should be read
+  # The file must be provided externally (e.g. via secret injection).
+  # Example:
+  # HCLOUD_TOKEN_FILE:
+  #   value: "/etc/hetzner/token"
+  # to disable reading the token from the secret you have to disable the original env var:
+  # HCLOUD_TOKEN: null
+
   HCLOUD_TOKEN:
     valueFrom:
       secretKeyRef:
@@ -49,8 +59,8 @@ env:
         optional: true
 
 image:
-  repository: hetznercloud/hcloud-cloud-controller-manager
-  tag: 'v{{ $.Chart.Version }}'
+  repository: docker.io/hetznercloud/hcloud-cloud-controller-manager
+  tag: "v{{ $.Chart.Version }}"
 
 monitoring:
   # When enabled, the hccm Pod will serve metrics on port :8233
@@ -69,7 +79,6 @@ monitoring:
     spec:
       podMetricsEndpoints:
         - port: metrics
-    
 
 nameOverride: ~
 
@@ -93,13 +102,21 @@ resources:
 
 selectorLabels:
   app.kubernetes.io/name: '{{ include "hcloud-cloud-controller-manager.name" $ }}'
-  app.kubernetes.io/instance: '{{ $.Release.Name }}'
+  app.kubernetes.io/instance: "{{ $.Release.Name }}"
 
 additionalTolerations: []
 
+# nodeSelector:
+#   node-role.kubernetes.io/control-plane: ""
 nodeSelector: {}
-  # node-role.kubernetes.io/control-plane: ""
+
+# Set the affinity for pods. (Only works with kind=Deployment)
+affinity: {}
 
 robot:
   # Set to true to enable support for Robot (Dedicated) servers.
   enabled: false
+
+podLabels: {}
+
+podAnnotations: {}
